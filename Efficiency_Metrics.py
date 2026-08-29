@@ -1,23 +1,40 @@
 
+# Functions for calculating efficiency metrics from tokenized text
 
-#A function to return number of tokens give the text and user's choice of the tokenizer
-def token_count(text , tokenizer):
-   #Apply the selected tokenizer on the given text and get the number of tokens produced
-    token_count = len(tokenizer.tokenize(text))
+#Determining number of tokens produced
+def token_count(tokens):
+    token_count = len(tokens)
     return token_count
     
- #Counting number of tokens produced by a specified tokenizer per word
-def fertility(text , tokenizer):
-    #Apply the selected tokenizer on the given text
-    token_count  = len(tokenizer.tokenize(text))
+# Calculating the average number of tokens produced per word
+def fertility(text , tokens):
     
-    #Counting number of words in a guven text
+    # Number of tokens 
+    token_count  = len(tokens)
+    
+    #Count number of words in a given text
     word_count = len(text.split())
     
     #Return fertilility
     return token_count / word_count
+   
+# Ratio of bytes per token
+def compression(text , tokens):
+    # Number of tokens 
+    token_count  = len(tokens)
     
-def 
+    #Get the number of bytes in the given text
+    bytes_count = len(text.encode('UTF-8')) # UTF-8 supports the Unicode characters used across all the supported languages
     
+    return bytes_count/token_count
     
-    
+ # English is used as the baseline for calculating token premium
+def token_premium(tokens , english_tokens):
+     # Number of tokens for the target language
+     token_count  = len(tokens)
+     
+     # token count for English
+     token_English = len(english_tokens)
+     
+     return token_count / token_English
+  
