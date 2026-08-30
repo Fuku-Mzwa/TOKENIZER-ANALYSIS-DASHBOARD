@@ -86,3 +86,25 @@ Measures how many of the gold-standard morpheme boundaries were correctly identi
 #### F1-score
 
 Provides a combined measure of precision and recall.
+
+
+# Frontend Componenets
+
+This directory contains the frontend components responsible for the application, dashboard visualisation and interface.
+
+1. Capstone#.py
+
+#Purpose 
+Shows the tokenizer dashboard with Home, Inspect, Compare and Rank pages.
+
+# Main responsibilities
+- Shows a navigation bar for the pages.
+- Saves a dataset file (text corpus) of various types.
+- Loads a tokenizer from the Hugging Face Hub using its model ID from given options or typed input.
+- Selects a language from the sidebar.
+
+# Main dependencies
+- tokenizers
+- streamlit
+- transformers
+- logging
