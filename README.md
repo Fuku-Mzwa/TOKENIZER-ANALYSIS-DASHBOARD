@@ -1,93 +1,88 @@
-# Tokenizer Analysis Dashboard
+# Backend Components
 
+This directory contains the backend components responsible for tokenizer loading and metric calculations for the Tokenizer Analysis Dashboard.
 
+1. tokenizer_services.py
 
-## Getting started
+#Purpose
 
-To make it easy for you to get started with GitLab, here's a list of recommended next steps.
+Handles the loading and management of Hugging Face tokenizers used by the application
 
-Already a pro? Just edit this README.md and make it your own. Want to make it easy? [Use the template at the bottom](#editing-this-readme)!
+# Main responsibilities
+-Loads a tokenizer from the Hugging Face Hub using its model ID
+-Provides tokenization functionality for the selected tokenizer
+-Uses caching to avoid unnecessarily loading the same tokenizer multiple times
+-Acts as the interface between the Streamlit application and the Hugging Face tokenizer library
 
-## Add your files
+# Main dependencies
+-transformers
+-logging
 
-- [ ] [Create](https://docs.gitlab.com/ee/user/project/repository/web_editor.html#create-a-file) or [upload](https://docs.gitlab.com/ee/user/project/repository/web_editor.html#upload-a-file) files
-- [ ] [Add files using the command line](https://docs.gitlab.com/topics/git/add_files/#add-files-to-a-git-repository) or push an existing Git repository with the following command:
+#Used by
+The Streamlit frontend will call the tokenizer service when a user selects and loads a tokenizer
 
-```
-cd existing_repo
-git remote add origin https://gitlab.cs.uct.ac.za/regex-rangers/tokenizer-analysis-dashboard.git
-git branch -M main
-git push -uf origin main
-```
+2. efficiency_metrics.py
 
-## Integrate with your tools
+#Purpose
+Calculates the efficiency-related metrics used to evaluate tokenizer performance on the default dataset
 
-- [ ] [Set up project integrations](https://gitlab.cs.uct.ac.za/regex-rangers/tokenizer-analysis-dashboard/-/settings/integrations)
+## Main responsibilities
 
-## Collaborate with your team
+-Calculates the number of tokens produced by a tokenizer
+-Calculates tokenizer fertility
+-Calculates compression
+-Calculates token premium
+-Handles cases such as division by zero where necessary
 
-- [ ] [Invite team members and collaborators](https://docs.gitlab.com/ee/user/project/members/)
-- [ ] [Create a new merge request](https://docs.gitlab.com/ee/user/project/merge_requests/creating_merge_requests.html)
-- [ ] [Automatically close issues from merge requests](https://docs.gitlab.com/ee/user/project/issues/managing_issues.html#closing-issues-automatically)
-- [ ] [Enable merge request approvals](https://docs.gitlab.com/ee/user/project/merge_requests/approvals/)
-- [ ] [Set auto-merge](https://docs.gitlab.com/user/project/merge_requests/auto_merge/)
+# Metrics
 
-## Test and Deploy
+## Token Count
 
-Use the built-in continuous integration in GitLab.
+The total number of tokens produced by the tokenizer for a given text.
 
-- [ ] [Get started with GitLab CI/CD](https://docs.gitlab.com/ee/ci/quick_start/)
-- [ ] [Analyze your code for known vulnerabilities with Static Application Security Testing (SAST)](https://docs.gitlab.com/ee/user/application_security/sast/)
-- [ ] [Deploy to Kubernetes, Amazon EC2, or Amazon ECS using Auto Deploy](https://docs.gitlab.com/ee/topics/autodevops/requirements.html)
-- [ ] [Use pull-based deployments for improved Kubernetes management](https://docs.gitlab.com/ee/user/clusters/agent/)
-- [ ] [Set up protected environments](https://docs.gitlab.com/ee/ci/environments/protected_environments.html)
+# Fertility
 
-***
+Measures the average number of tokens produced per word.
 
-# Editing this README
+#Compression
 
-When you're ready to make this README your own, just edit this file and use the handy template below (or feel free to structure it however you want - this is just a starting point!). Thanks to [makeareadme.com](https://www.makeareadme.com/) for this template.
+Measures how efficiently the tokenizer represents the input text in terms of token count.
 
-## Suggestions for a good README
+# Token Premium
 
-Every project is different, so consider which of these sections apply to yours. The sections used in the template are suggestions for most open source projects. Also keep in mind that while a README can be too long and detailed, too long is better than too short. If you think your README is too long, consider utilizing another form of documentation rather than cutting out information.
+Measures the relative increase in tokenization cost for a language compared with English.
 
-## Name
-Choose a self-explaining name for your project.
+## Used by
 
-## Description
-Let people know what your project can do specifically. Provide context and add a link to any reference visitors might be unfamiliar with. A list of Features or a Background subsection can also be added here. If there are alternatives to your project, this is a good place to list differentiating factors.
+The Streamlit application will use these functions to calculate and display tokenizer efficiency results.
 
-## Badges
-On some READMEs, you may see small images that convey metadata, such as whether or not all the tests are passing for the project. You can use Shields to add some to your README. Many services also have instructions for adding a badge.
+3. mbi.py
+# Purpose
+Calculates morpheme boundary alignment metrics between the tokenizer output and the gold-standard segmentation
 
-## Visuals
-Depending on what you are making, it can be a good idea to include screenshots or even a video (you'll frequently see GIFs rather than actual videos). Tools like ttygif can help, but check out Asciinema for a more sophisticated method.
+# Main responsibilities
 
-## Installation
-Within a particular ecosystem, there may be a common way of installing things, such as using Yarn, NuGet, or Homebrew. However, consider the possibility that whoever is reading your README is a novice and would like more guidance. Listing specific steps helps remove ambiguity and gets people to using your project as quickly as possible. If it only runs in a specific context like a particular programming language version or operating system or has dependencies that have to be installed manually, also add a Requirements subsection.
+- Obtains the gold-standard morpheme boundaries from the dataset
+- Determines the boundaries produced by the tokenizer
+- Compares predicted tokenizer boundaries with the gold boundaries
+- Calculates: Precision Recall F1-score
 
-## Usage
-Use examples liberally, and show the expected output if you can. It's helpful to have inline the smallest example of usage that you can demonstrate, while providing links to more sophisticated examples if they are too long to reasonably include in the README.
+# Gold-standard boundaries
 
-## Support
-Tell people where they can go to for help. It can be any combination of an issue tracker, a chat room, an email address, etc.
+The default dataset contains morpheme segmentations using `_` to indicate morpheme boundaries
 
-## Roadmap
-If you have ideas for releases in the future, it is a good idea to list them in the README.
+The `_` character itself is not treated as part of the original text. The implementation keeps track of the character positions so that the gold boundaries can be compared with the boundaries produced by the tokenizer
 
-## Contributing
-State if you are open to contributions and what your requirements are for accepting them.
+### Metrics
 
-For people who want to make changes to your project, it's helpful to have some documentation on how to get started. Perhaps there is a script that they should run or some environment variables that they need to set. Make these steps explicit. These instructions could also be useful to your future self.
+#### Precision
 
-You can also document commands to lint the code or run tests. These steps help to ensure high code quality and reduce the likelihood that the changes inadvertently break something. Having instructions for running tests is especially helpful if it requires external setup, such as starting a Selenium server for testing in a browser.
+Measures how many of the boundaries identified by the tokenizer are correct
 
-## Authors and acknowledgment
-Show your appreciation to those who have contributed to the project.
+#### Recall
 
-## License
-For open source projects, say how it is licensed.
+Measures how many of the gold-standard morpheme boundaries were correctly identified by the tokenizer.
 
-## Project status
-If you have run out of energy or time for your project, put a note at the top of the README saying that development has slowed down or stopped completely. Someone may choose to fork your project or volunteer to step in as a maintainer or owner, allowing your project to keep going. You can also make an explicit request for maintainers.
+#### F1-score
+
+Provides a combined measure of precision and recall.
