@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import warnings
 
+# Quiet noisy library warnings so the Streamlit UI stays readable
 warnings.filterwarnings("ignore")
 
 import pandas as pd
@@ -15,19 +16,24 @@ import plotly.graph_objects as go
 import streamlit as st
 from streamlit_option_menu import option_menu
 
+# Data loaders + language list (FLORES / NCHLT)
 from datasets import (
     LANGUAGE_NAMES,
     has_morphology,
     load_flores,
     load_nchlt_gold,
 )
+# Efficiency numbers: fertility, compression, token premium, etc.
 from Efficiency_Metrics import compute_all
+# Morphological boundary P/R/F1 against NCHLT gold
 from MBI import evaluate_corpus
+# Hugging Face load + tokenize helpers (with caching)
 from tokenizer_services import load_tokenizer, tokenize_text
 
 # -----------------------------------------------------------------------------
 # Page config
 # -----------------------------------------------------------------------------
+# Wide layout gives Inspect/Compare room for metrics and charts
 st.set_page_config(
     page_title="Tokenizer Analysis Dashboard",
     page_icon="📌",
@@ -38,6 +44,7 @@ st.set_page_config(
 # -----------------------------------------------------------------------------
 # Shared constants
 # -----------------------------------------------------------------------------
+# Friendly label -> Hugging Face model id (shortlist for demos)
 POPULAR_TOKENIZERS = {
     "BERT (multilingual)": "bert-base-multilingual-cased",
     "XLM-RoBERTa": "xlm-roberta-base",
@@ -52,10 +59,12 @@ POPULAR_TOKENIZERS = {
 # Helpers
 # -----------------------------------------------------------------------------
 def init_session():
+    # Streamlit reruns the script on every click; session_state keeps
+    # loaded tokenizers alive so we don't download them again each time
     defaults = {
-        "tokenizer": None,
-        "tokenizer_name": None,
-        "tokenizer_b": None,
+        "tokenizer": None,       # tokenizer A (Inspect + Compare A)
+        "tokenizer_name": None,  # HF id string for A
+        "tokenizer_b": None,     # tokenizer B (Compare only)
         "tokenizer_b_name": None,
     }
     for k, v in defaults.items():
@@ -64,9 +73,11 @@ def init_session():
 
 
 def show_token_chips(tokens, max_show=60):
+    # Draw subword pieces as inline code chips so splits are easy to see
     if not tokens:
         st.write("_No tokens_")
         return
+    # Cap length so a long sentence doesn't dominate the page
     chips = " ".join(f"`{t}`" for t in tokens[:max_show])
     st.markdown(chips)
     if len(tokens) > max_show:
@@ -74,15 +85,18 @@ def show_token_chips(tokens, max_show=60):
 
 
 def metric_row(efficiency: dict, morphology: dict | None = None):
+    # Scorecards for efficiency (always) and MBI (only when we have gold data)
     cols = st.columns(4)
     cols[0].metric("Token count", f"{efficiency.get('token_count', 0):,}")
     cols[1].metric("Fertility", f"{efficiency.get('fertility', 0):.3f}")
     cols[2].metric("Compression (B/tok)", f"{efficiency.get('compression', 0):.2f}")
+    # Premium needs parallel English; free text usually won't have it
     if "token_premium" in efficiency:
         cols[3].metric("Token premium", f"{efficiency['token_premium']:.3f}")
     else:
         cols[3].metric("Words", f"{efficiency.get('word_count', 0):,}")
 
+    # Skip MBI block for English/Afrikaans or empty eval
     if morphology and morphology.get("n_words", 0) > 0:
         st.markdown("**Morphological Boundary Identification (MBI)**")
         mcols = st.columns(3)
@@ -97,6 +111,7 @@ def metric_row(efficiency: dict, morphology: dict | None = None):
 
 def tokenizer_picker(label: str, key_prefix: str) -> str | None:
     """Popular + custom HF ID picker. Returns model id or None."""
+    # key_prefix keeps Inspect / Compare A / Compare B widgets from clashing
     st.markdown(f"**{label}**")
     names = list(POPULAR_TOKENIZERS.keys()) + ["Other (custom HF ID)"]
     choice = st.selectbox(
@@ -106,6 +121,7 @@ def tokenizer_picker(label: str, key_prefix: str) -> str | None:
     )
     if choice != "Other (custom HF ID)":
         return POPULAR_TOKENIZERS[choice]
+    # Free-typed Hugging Face repo id
     custom = st.text_input(
         "Hugging Face model ID",
         placeholder="e.g. google/gemma-2b",
@@ -116,6 +132,7 @@ def tokenizer_picker(label: str, key_prefix: str) -> str | None:
 
 def load_and_store(model_id: str, state_tok_key: str, state_name_key: str) -> bool:
     """Load tokenizer into session_state. Returns True on success."""
+    # Wraps tokenizer_services.load_tokenizer and stores the result for later runs
     try:
         with st.spinner(f"Loading `{model_id}` …"):
             tok = load_tokenizer(model_id)
@@ -124,6 +141,7 @@ def load_and_store(model_id: str, state_tok_key: str, state_name_key: str) -> bo
         st.success(f"Loaded **{model_id}**")
         return True
     except ValueError as e:
+        # Bad id or download failure — clear any half-set state
         st.session_state[state_tok_key] = None
         st.session_state[state_name_key] = None
         st.error(str(e))
@@ -131,13 +149,17 @@ def load_and_store(model_id: str, state_tok_key: str, state_name_key: str) -> bo
 
 
 def run_efficiency_on_flores(tokenizer, language: str, max_sentences: int):
+    # Pull parallel FLORES lines for the target language and for English
     sentences = load_flores(language, max_sentences=max_sentences)
     eng = load_flores("English", max_sentences=max_sentences)
+    # Join into one blob so fertility/compression are corpus-level
     text = "\n".join(sentences)
     eng_text = "\n".join(eng)
     tok_result = tokenize_text(tokenizer, text)
     eng_result = tokenize_text(tokenizer, eng_text)
+    # eng tokens are only used for token premium
     metrics = compute_all(text, tok_result["tokens"], eng_result["tokens"])
+    # Keep a few sentence-level tokenizations for the UI samples
     samples = []
     for s in sentences[:5]:
         r = tokenize_text(tokenizer, s)
@@ -146,6 +168,7 @@ def run_efficiency_on_flores(tokenizer, language: str, max_sentences: int):
 
 
 def run_morphology(tokenizer, language: str, max_words: int):
+    # No NCHLT gold for some languages — caller should treat None as "skip MBI"
     if not has_morphology(language):
         return None
     gold = load_nchlt_gold(language)
@@ -159,6 +182,7 @@ init_session()
 
 st.title("📌 Tokenizer Analysis Dashboard")
 
+# Horizontal menu drives which page body runs below
 selected = option_menu(
     menu_title=None,
     options=["Home", "Inspect", "Compare", "Rank"],
@@ -172,6 +196,7 @@ selected = option_menu(
 # HOME
 # =============================================================================
 if selected == "Home":
+    # Tighten top padding a bit so the title sits closer to the menu
     st.markdown(
         """
         <style>div.block-container{padding-top:1.5rem;}</style>
@@ -179,6 +204,7 @@ if selected == "Home":
         unsafe_allow_html=True,
     )
 
+    # Short pitch: why tokenizers matter for SA languages
     st.markdown(
         """
         ### Analyse how LLM tokenizers treat South African languages
@@ -190,6 +216,7 @@ if selected == "Home":
         """
     )
 
+    # Three cards — one per mode
     c1, c2, c3 = st.columns(3)
     with c1:
         st.info(
@@ -219,6 +246,7 @@ if selected == "Home":
     st.subheader("Metrics")
     m1, m2 = st.columns(2)
     with m1:
+        # Efficiency family (FLORES parallel text)
         st.markdown(
             """
             **Efficiency (FLORES-dev)**  
@@ -229,6 +257,7 @@ if selected == "Home":
             """
         )
     with m2:
+        # Linguistic family (NCHLT gold boundaries)
         st.markdown(
             """
             **Linguistic (NCHLT)**  
@@ -274,6 +303,7 @@ elif selected == "Inspect":
             else:
                 st.warning("Select or enter a tokenizer ID first.")
     with col_status:
+        # Mirror whatever is currently in session_state
         if st.session_state.tokenizer_name:
             st.success(f"Active: `{st.session_state.tokenizer_name}`")
         else:
@@ -282,6 +312,7 @@ elif selected == "Inspect":
     st.markdown("---")
 
     # --- Language & source ---
+    # Default to isiZulu so MBI is available out of the box in demos
     lang = st.selectbox("Language", LANGUAGE_NAMES, index=LANGUAGE_NAMES.index("isiZulu"))
     source = st.radio(
         "Analysis source",
@@ -289,6 +320,7 @@ elif selected == "Inspect":
         horizontal=True,
     )
 
+    # Smaller limits = faster interactive runs; user can raise them
     max_sent = st.slider("Max FLORES sentences", 50, 997, 150, 50)
     max_morph = st.slider("Max NCHLT words (morphology)", 50, 2000, 400, 50)
 
@@ -300,6 +332,7 @@ elif selected == "Inspect":
     elif source == "Upload text file":
         up = st.file_uploader("Upload a UTF-8 `.txt` file", type=["txt"], key="inspect_up")
         if up is not None:
+            # Replace undecodable bytes instead of crashing
             upload_text = up.read().decode("utf-8", errors="replace")
             st.caption(f"Loaded {len(upload_text):,} characters")
 
@@ -318,13 +351,16 @@ elif selected == "Inspect":
                         tok, lang, max_sent
                     )
                     morphology = None
+                    # Only languages with NCHLT files get boundary scores
                     if has_morphology(lang):
                         morphology = run_morphology(tok, lang, max_morph)
 
                 st.subheader(f"{lang} · `{name}`")
                 st.caption(f"FLORES sentences used: {n_sent}")
+                # Numbers first
                 metric_row(efficiency, morphology)
 
+                # Then a few expandable examples of actual splits
                 st.markdown("#### Sample tokenizations")
                 for s in samples[:3]:
                     with st.expander(
@@ -339,6 +375,7 @@ elif selected == "Inspect":
                 else:
                     with st.spinner("Tokenizing …"):
                         result = tokenize_text(tok, text)
+                        # No English baseline here, so no token premium
                         efficiency = compute_all(text, result["tokens"])
                     st.subheader("Results")
                     metric_row(efficiency)
@@ -358,6 +395,7 @@ elif selected == "Inspect":
                     st.subheader("Results")
                     metric_row(efficiency)
                     st.markdown("#### First tokens")
+                    # Preview only — full file can be huge
                     show_token_chips(result["tokens"][:60])
 
 # =============================================================================
@@ -371,6 +409,8 @@ elif selected == "Compare":
     st.header("Compare two tokenizers")
     st.caption("Side-by-side efficiency and morphological alignment on the same language.")
 
+    # Two independent loaders; A uses tokenizer / tokenizer_name,
+    # B uses tokenizer_b / tokenizer_b_name in session_state
     col_a, col_b = st.columns(2)
     with col_a:
         id_a = tokenizer_picker("Tokenizer A", "cmp_a")
@@ -411,6 +451,7 @@ elif selected == "Compare":
             name_a = st.session_state.tokenizer_name
             name_b = st.session_state.tokenizer_b_name
 
+            # Same language + same sentence budget for a fair comparison
             with st.spinner("Analysing both tokenizers …"):
                 eff_a, samples_a, n_a = run_efficiency_on_flores(tok_a, lang, max_sent)
                 eff_b, samples_b, n_b = run_efficiency_on_flores(tok_b, lang, max_sent)
@@ -420,6 +461,7 @@ elif selected == "Compare":
             st.subheader(f"Comparison on {lang}")
             st.caption(f"FLORES sentences: {n_a}")
 
+            # Build a small table: one row per tokenizer
             rows = []
             for label, eff, morph in (
                 (f"A: {name_a}", eff_a, morph_a),
@@ -439,7 +481,7 @@ elif selected == "Compare":
                 rows.append(row)
             st.dataframe(pd.DataFrame(rows), use_container_width=True, hide_index=True)
 
-            # Bar chart
+            # Grouped bars for the metrics people care about most in a demo
             fig = go.Figure()
             labels = ["A", "B"]
             fig.add_trace(
@@ -475,6 +517,7 @@ elif selected == "Compare":
             )
             st.plotly_chart(fig, use_container_width=True)
 
+            # Same sentences, two tokenizations — makes differences concrete
             st.markdown("#### Sample tokenizations")
             for i in range(min(3, len(samples_a), len(samples_b))):
                 st.markdown(f"**Text:** {samples_a[i]['text'][:120]}…")
@@ -495,6 +538,7 @@ elif selected == "Rank":
         unsafe_allow_html=True,
     )
     st.header("Rank")
+    # Left as a placeholder for a later milestone
     st.info(
         "The **Rank / leaderboard** feature is not implemented yet. "
         "Use **Inspect** and **Compare** for now."
