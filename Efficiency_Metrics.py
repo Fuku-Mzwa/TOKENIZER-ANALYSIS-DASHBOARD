@@ -1,52 +1,56 @@
-# Functions for calculating efficiency metrics from tokenized text
+"""Efficiency metrics: token count, fertility, compression, token premium."""
+from __future__ import annotations
 
-#Determining number of tokens produced
-def token_count(tokens):
-    token_count = len(tokens)
-    return token_count
-    
-# Calculating the average number of tokens produced per word
-def fertility(text , tokens):
-    
-    # Number of tokens 
-    token_count  = len(tokens)
-    
-    #Count number of words in a given text
+from typing import Dict, List, Optional
+
+
+def token_count(tokens) -> int:
+    """Number of tokens produced."""
+    return len(tokens)
+
+
+def fertility(text: str, tokens) -> float:
+    """Average number of tokens per whitespace-separated word."""
+    n_tokens = len(tokens)
     word_count = len(text.split())
-    
     if word_count == 0:
-       return 0.0
-       
-    #Return fertilility
-    return token_count / word_count
-   
-# Ratio of bytes per token
-def compression(text , tokens):
-    # Number of tokens 
-    token_count  = len(tokens)
-    
-    #Get the number of bytes in the given text
-    bytes_count = len(text.encode('UTF-8')) # UTF-8 supports the Unicode characters used across all the supported languages
-    
-    if token_count == 0:
-      return 0.0
-    
-    return bytes_count/token_count
-    
-# English is used as the baseline for calculating token premium
-def token_premium(tokens, english_tokens):
-    # Number of tokens for the target language
-    token_count = len(tokens)
-
-    # Number of tokens for English
-    token_English = len(english_tokens)
-
-    if token_English == 0:
         return 0.0
+    return n_tokens / word_count
 
-    return token_count / token_English
 
-    
-    
-    
-    
+def compression(text: str, tokens) -> float:
+    """Bytes (UTF-8) per token — higher means denser packing."""
+    n_tokens = len(tokens)
+    bytes_count = len(text.encode("utf-8"))
+    if n_tokens == 0:
+        return 0.0
+    return bytes_count / n_tokens
+
+
+def token_premium(tokens, english_tokens) -> float:
+    """
+    tokens(lang) / tokens(English) on parallel text.
+    > 1 means the language is more expensive than English.
+    """
+    n = len(tokens)
+    n_eng = len(english_tokens)
+    if n_eng == 0:
+        return 0.0
+    return n / n_eng
+
+
+def compute_all(
+    text: str,
+    tokens: List[str],
+    english_tokens: Optional[List[str]] = None,
+) -> Dict[str, float]:
+    """Convenience wrapper used by the UI."""
+    result = {
+        "token_count": token_count(tokens),
+        "word_count": len(text.split()) if text.strip() else 0,
+        "fertility": fertility(text, tokens),
+        "compression": compression(text, tokens),
+    }
+    if english_tokens is not None:
+        result["token_premium"] = token_premium(tokens, english_tokens)
+    return result
