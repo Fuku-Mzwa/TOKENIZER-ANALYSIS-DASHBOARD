@@ -7,4 +7,3 @@ pandas>=2.0.0
 plotly>=5.18.0
 sentencepiece>=0.1.99
 protobuf>=4.0.0
-torch>=2.0.0

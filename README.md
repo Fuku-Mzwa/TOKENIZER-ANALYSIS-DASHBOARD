@@ -1,110 +1,79 @@
-# Backend Components
+# Tokenizer Analysis Dashboard (TAD)
 
-This directory contains the backend components responsible for tokenizer loading and metric calculations for the Tokenizer Analysis Dashboard.
+CSC3003S Capstone Project — interactive dashboard for analysing Hugging Face tokenizers on South African languages.
 
-1. tokenizer_services.py
+## Features
 
-#Purpose
+| Mode | Status |
+|------|--------|
+| **Home** | Project overview, supported languages, metrics explained |
+| **Inspect** | Load one tokenizer → FLORES efficiency + NCHLT morphology, or free text / upload |
+| **Compare** | Side-by-side metrics and sample tokenizations for two tokenizers |
+| **Rank** | Placeholder (not implemented yet) |
 
-Handles the loading and management of Hugging Face tokenizers used by the application
+### Supported languages
 
-# Main responsibilities
--Loads a tokenizer from the Hugging Face Hub using its model ID
--Provides tokenization functionality for the selected tokenizer
--Uses caching to avoid unnecessarily loading the same tokenizer multiple times
--Acts as the interface between the Streamlit application and the Hugging Face tokenizer library
-
-# Main dependencies
--transformers
--logging
-
-#Used by
-The Streamlit frontend will call the tokenizer service when a user selects and loads a tokenizer
-
-2. efficiency_metrics.py
-
-#Purpose
-Calculates the efficiency-related metrics used to evaluate tokenizer performance on the default dataset
-
-## Main responsibilities
-
--Calculates the number of tokens produced by a tokenizer
--Calculates tokenizer fertility
--Calculates compression
--Calculates token premium
--Handles cases such as division by zero where necessary
-
-# Metrics
-
-## Token Count
-
-The total number of tokens produced by the tokenizer for a given text.
-
-# Fertility
-
-Measures the average number of tokens produced per word.
-
-#Compression
-
-Measures how efficiently the tokenizer represents the input text in terms of token count.
-
-# Token Premium
-
-Measures the relative increase in tokenization cost for a language compared with English.
-
-## Used by
-
-The Streamlit application will use these functions to calculate and display tokenizer efficiency results.
-
-3. mbi.py
-# Purpose
-Calculates morpheme boundary alignment metrics between the tokenizer output and the gold-standard segmentation
-
-# Main responsibilities
-
-- Obtains the gold-standard morpheme boundaries from the dataset
-- Determines the boundaries produced by the tokenizer
-- Compares predicted tokenizer boundaries with the gold boundaries
-- Calculates: Precision Recall F1-score
-
-# Gold-standard boundaries
-
-The default dataset contains morpheme segmentations using `_` to indicate morpheme boundaries
-
-The `_` character itself is not treated as part of the original text. The implementation keeps track of the character positions so that the gold boundaries can be compared with the boundaries produced by the tokenizer
+Afrikaans · English · isiXhosa · isiZulu · Sesotho · Sepedi · Setswana · siSwati · Xitsonga
 
 ### Metrics
 
-#### Precision
+**Efficiency (FLORES-dev)**  
+Token count · Fertility (tokens/word) · Compression (bytes/token) · Token premium (vs English)
 
-Measures how many of the boundaries identified by the tokenizer are correct
+**Linguistic (NCHLT)**  
+Morphological Boundary Identification — Precision, Recall, F1
 
-#### Recall
+## Project structure
 
-Measures how many of the gold-standard morpheme boundaries were correctly identified by the tokenizer.
+```
+tokenizer-analysis-dashboard/
+├── Capstone5.py              # Main Streamlit app (run this)
+├── tokenizer_services.py     # HF tokenizer load + tokenize + boundary helpers
+├── Efficiency_Metrics.py     # Token count, fertility, compression, premium
+├── MBI.py                    # Morphological boundary P/R/F1
+├── datasets.py               # FLORES + NCHLT loaders
+├── requirements.txt
+├── data/
+│   ├── FLORES dev/           # 997 parallel sentences × 9 languages
+│   └── NCHLT/                # Gold morpheme segmentations
+└── frontend/                 # Older UI drafts (not used)
+```
 
-#### F1-score
+## Installation
 
-Provides a combined measure of precision and recall.
+```bash
+cd tokenizer-analysis-dashboard
+python -m venv .venv
+source .venv/bin/activate          # Windows: .venv\Scripts\activate
+pip install -r requirements.txt
+```
 
+## Run
 
-# Frontend Componenets
+```bash
+streamlit run Capstone5.py
+```
 
-This directory contains the frontend components responsible for the application, dashboard visualisation and interface.
+Open the URL shown in the terminal (usually http://localhost:8501).
 
-1. Capstone#.py
+## How the pieces connect
 
-#Purpose 
-Shows the tokenizer dashboard with Home, Inspect, Compare and Rank pages.
+```
+Capstone5.py (UI)
+    │
+    ├─► tokenizer_services.load_tokenizer / tokenize_text
+    ├─► datasets.load_flores / load_nchlt_gold
+    ├─► Efficiency_Metrics.compute_all
+    └─► MBI.evaluate_corpus
+```
 
-# Main responsibilities
-- Shows a navigation bar for the pages.
-- Saves a dataset file (text corpus) of various types.
-- Loads a tokenizer from the Hugging Face Hub using its model ID from given options or typed input.
-- Selects a language from the sidebar.
+1. User selects a Hugging Face model ID and clicks **Load tokenizer**.
+2. On **Run analysis**, the app loads FLORES (and NCHLT if available).
+3. Text is tokenized; efficiency metrics are computed against English parallel text.
+4. For languages with NCHLT gold, each word's gold `_` boundaries are compared to tokenizer cut positions → P/R/F1.
 
-# Main dependencies
-- tokenizers
-- streamlit
-- transformers
-- logging
+## Notes
+
+- FLORES folder name contains a space (`FLORES dev`) — paths in `datasets.py` handle this.
+- Afrikaans and English have no NCHLT gold; morphology metrics are skipped for them.
+- Rank / leaderboard is intentionally left as a placeholder for a later milestone.

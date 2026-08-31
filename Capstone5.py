@@ -1,157 +1,510 @@
 #!/usr/bin/env python
-
 # coding: utf-8
+"""
+Tokenizer Analysis Dashboard (TAD)
+CSC3003S Capstone — Home · Inspect · Compare
+"""
+from __future__ import annotations
 
+import warnings
 
-import streamlit as st  # for interactive web apps from data scripts
-import plotly.express as px     # graphing library makes interactive, publication-quality graphs.
-import pandas as pd     # statistical calculations
-import os               # to download and upload files
-import warnings 
-warnings.filterwarnings('ignore')
-from transformers import AutoTokenizer, AutoModelForTokenClassification, pipeline  # for tokenization and named entity recognition
-from tokenizers import Tokenizer
+warnings.filterwarnings("ignore")
+
+import pandas as pd
+import plotly.graph_objects as go
+import streamlit as st
 from streamlit_option_menu import option_menu
-from huggingface_hub import HfApi
-from pathlib import Path
 
-st.set_page_config(page_title = "Tokenizer Analysis Dashboard", page_icon = ":pushpin:",layout = "wide")  # layout of the web page is set to wide to use the entire screen space
+from datasets import (
+    LANGUAGE_NAMES,
+    has_morphology,
+    load_flores,
+    load_nchlt_gold,
+)
+from Efficiency_Metrics import compute_all
+from MBI import evaluate_corpus
+from tokenizer_services import load_tokenizer, tokenize_text
 
-st.title(":pushpin: Tokenizer Analysis Dashboard") #  code for title of the home page
-
-selected = option_menu(   # navigation bar for the web page
-        menu_title = None,
-        options = ["Home", "Inspect", "Compare", "Rank"],
-        icons = ["house", "eye", "arrow-left-right", "trophy"],
-        menu_icon = "cast",
-        default_index = 0,
-        orientation = "horizontal",
+# -----------------------------------------------------------------------------
+# Page config
+# -----------------------------------------------------------------------------
+st.set_page_config(
+    page_title="Tokenizer Analysis Dashboard",
+    page_icon="📌",
+    layout="wide",
+    initial_sidebar_state="expanded",
 )
 
-if selected == "Home":  # home page of the web app
-    st.title(f"You are on page {selected}")
-    st.markdown('<style>div.block-container{padding-top:2rem;}</style>',unsafe_allow_html=True)  # padding for the web page
+# -----------------------------------------------------------------------------
+# Shared constants
+# -----------------------------------------------------------------------------
+POPULAR_TOKENIZERS = {
+    "BERT (multilingual)": "bert-base-multilingual-cased",
+    "XLM-RoBERTa": "xlm-roberta-base",
+    "DistilBERT (multilingual)": "distilbert-base-multilingual-cased",
+    "GPT-2": "gpt2",
+    "RoBERTa": "roberta-base",
+    "T5": "google-t5/t5-base",
+    "Llama 3.2 1B": "meta-llama/Llama-3.2-1B",
+}
 
-elif selected == "Inspect":  # home page of the web app
-    st.title(f"You are on page {selected}")
-    
-    BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-    file_path = os.path.join(BASE_DIR, "Sample - Superstore.xls")
-
-    st.markdown('<style>div.block-container{padding-top:2rem;}</style>',unsafe_allow_html=True)  # padding for the web page
-
-    st.subheader("Dataset upload")  # subheader for the file upload section
-    fl = st.file_uploader("Upload your dataset file", type=["csv","txt","xlsx","xls"])  # upload csv file
-    if fl is not None:   # if the file loads correctly
-        filename = fl.name
-        st.write(f"Uploaded file: {filename}")
-
-        if filename.endswith('.csv'):
-            df = pd.read_csv(fl, encoding = "ISO-8859-1")  # read the uploaded file into a pandas dataframe
-
-        elif filename.endswith(('.xlsx', '.xls')):
-            df = pd.read_excel(fl)  # read the uploaded file into a pandas dataframe
-
-        elif filename.endswith('.txt'):
-            df = pd.read_csv(fl, sep="\t", encoding = "ISO-8859-1")  # read the uploaded file into a pandas dataframe
-    else:
-        os.chdir(Path.home() / "Downloads")
-
-    st.sidebar.header("Choose your language for analysis:")  # header for the language selection
-    language = st.sidebar.selectbox("Select your language", ["English", "isiXhosa", "isiZulu", "Sesotho", "Sepedi", "Setswana", "siSwati", "Xitsonga"])  # side bar showing the language options for analysis
-
-    
-    POPULAR_TOKENIZERS = {  # popular/most common tokenizers as a dictionary with the name of the tokenizer as the key and the model ID as the value
-        "GPT-2": "gpt2",
-        "BERT": "bert-base-uncased",
-        "RoBERTa": "roberta-base",
-        "CodeBERT": "microsoft/codebert-base",
-        "Llama 3.2": "meta-llama/Llama-3.2-1B",
-        "T5": "google-t5/t5-base"
+# -----------------------------------------------------------------------------
+# Helpers
+# -----------------------------------------------------------------------------
+def init_session():
+    defaults = {
+        "tokenizer": None,
+        "tokenizer_name": None,
+        "tokenizer_b": None,
+        "tokenizer_b_name": None,
     }
+    for k, v in defaults.items():
+        if k not in st.session_state:
+            st.session_state[k] = v
 
-    
-    if "tokenizer" not in st.session_state:  # session state saves the variable values across reruns of the app, so that the user does not have to reselect the tokenizer every time they run the app
-        st.session_state.tokenizer = None
 
-    if "tokenizer_name" not in st.session_state:
-        st.session_state.tokenizer_name = None
+def show_token_chips(tokens, max_show=60):
+    if not tokens:
+        st.write("_No tokens_")
+        return
+    chips = " ".join(f"`{t}`" for t in tokens[:max_show])
+    st.markdown(chips)
+    if len(tokens) > max_show:
+        st.caption(f"… and {len(tokens) - max_show} more")
 
-    st.subheader("Choose a tokenizer") # subheader
 
-    popular_names = list(POPULAR_TOKENIZERS.keys())  # saves the names of the popular tokenizers in a list
+def metric_row(efficiency: dict, morphology: dict | None = None):
+    cols = st.columns(4)
+    cols[0].metric("Token count", f"{efficiency.get('token_count', 0):,}")
+    cols[1].metric("Fertility", f"{efficiency.get('fertility', 0):.3f}")
+    cols[2].metric("Compression (B/tok)", f"{efficiency.get('compression', 0):.2f}")
+    if "token_premium" in efficiency:
+        cols[3].metric("Token premium", f"{efficiency['token_premium']:.3f}")
+    else:
+        cols[3].metric("Words", f"{efficiency.get('word_count', 0):,}")
 
-    selected_popular = st.selectbox(  # displays the names of the popular tokenizers in a dropdown menu, with "Other" as the last option
+    if morphology and morphology.get("n_words", 0) > 0:
+        st.markdown("**Morphological Boundary Identification (MBI)**")
+        mcols = st.columns(3)
+        mcols[0].metric("Precision", f"{morphology['precision']:.3f}")
+        mcols[1].metric("Recall", f"{morphology['recall']:.3f}")
+        mcols[2].metric("F1", f"{morphology['f1']:.3f}")
+        st.caption(
+            f"Evaluated on {morphology['n_words']:,} words · "
+            f"micro-F1 = {morphology.get('micro_f1', 0):.3f}"
+        )
+
+
+def tokenizer_picker(label: str, key_prefix: str) -> str | None:
+    """Popular + custom HF ID picker. Returns model id or None."""
+    st.markdown(f"**{label}**")
+    names = list(POPULAR_TOKENIZERS.keys()) + ["Other (custom HF ID)"]
+    choice = st.selectbox(
         "Popular tokenizers",
-        popular_names + ["Other"],
+        names,
+        key=f"{key_prefix}_popular",
+    )
+    if choice != "Other (custom HF ID)":
+        return POPULAR_TOKENIZERS[choice]
+    custom = st.text_input(
+        "Hugging Face model ID",
+        placeholder="e.g. google/gemma-2b",
+        key=f"{key_prefix}_custom",
+    )
+    return custom.strip() if custom and custom.strip() else None
+
+
+def load_and_store(model_id: str, state_tok_key: str, state_name_key: str) -> bool:
+    """Load tokenizer into session_state. Returns True on success."""
+    try:
+        with st.spinner(f"Loading `{model_id}` …"):
+            tok = load_tokenizer(model_id)
+        st.session_state[state_tok_key] = tok
+        st.session_state[state_name_key] = model_id
+        st.success(f"Loaded **{model_id}**")
+        return True
+    except ValueError as e:
+        st.session_state[state_tok_key] = None
+        st.session_state[state_name_key] = None
+        st.error(str(e))
+        return False
+
+
+def run_efficiency_on_flores(tokenizer, language: str, max_sentences: int):
+    sentences = load_flores(language, max_sentences=max_sentences)
+    eng = load_flores("English", max_sentences=max_sentences)
+    text = "\n".join(sentences)
+    eng_text = "\n".join(eng)
+    tok_result = tokenize_text(tokenizer, text)
+    eng_result = tokenize_text(tokenizer, eng_text)
+    metrics = compute_all(text, tok_result["tokens"], eng_result["tokens"])
+    samples = []
+    for s in sentences[:5]:
+        r = tokenize_text(tokenizer, s)
+        samples.append({"text": s, "tokens": r["tokens"], "token_count": r["token_count"]})
+    return metrics, samples, len(sentences)
+
+
+def run_morphology(tokenizer, language: str, max_words: int):
+    if not has_morphology(language):
+        return None
+    gold = load_nchlt_gold(language)
+    return evaluate_corpus(tokenizer, gold, max_words=max_words)
+
+
+# -----------------------------------------------------------------------------
+# Navigation
+# -----------------------------------------------------------------------------
+init_session()
+
+st.title("📌 Tokenizer Analysis Dashboard")
+
+selected = option_menu(
+    menu_title=None,
+    options=["Home", "Inspect", "Compare", "Rank"],
+    icons=["house", "eye", "arrow-left-right", "trophy"],
+    menu_icon="cast",
+    default_index=0,
+    orientation="horizontal",
+)
+
+# =============================================================================
+# HOME
+# =============================================================================
+if selected == "Home":
+    st.markdown(
+        """
+        <style>div.block-container{padding-top:1.5rem;}</style>
+        """,
+        unsafe_allow_html=True,
     )
 
-    if selected_popular != "Other":   # chosen popular tokenizer is saved in the variable selected_tokenizer from the dictionary POPULAR_TOKENIZERS
-        selected_tokenizer = POPULAR_TOKENIZERS[selected_popular]
+    st.markdown(
+        """
+        ### Analyse how LLM tokenizers treat South African languages
 
-    else: #selected_popular == "Other":  # typed model/tokenizer is checked to be nonempty with space stripped, and saved in the variable selected_tokenizer
-        search_query = st.text_input( # model/tokenizer search
-            "Search for an AI model / tokenizer",
-            help="e.g. google/gemma-2b, xlm-roberta-base, meta-llama/Llama-3.2-1B",
+        Tokenizers split text into subword units before a language model sees it.
+        Different tokenizers fragment languages very differently — especially
+        morphologically rich ones like **isiZulu** and **isiXhosa**. That affects
+        cost, context length, and how well meaning is preserved.
+        """
+    )
+
+    c1, c2, c3 = st.columns(3)
+    with c1:
+        st.info(
+            "**Inspect**\n\n"
+            "Load one Hugging Face tokenizer and measure efficiency "
+            "(FLORES) and morphological alignment (NCHLT)."
         )
-        selected_tokenizer = search_query.strip()
-    '''''
-    else:   # if no popular tokenizer is selected and no model/tokenizer is typed, the variable selected_tokenizer is set to None
-        selected_tokenizer = None
-    '''''
+    with c2:
+        st.info(
+            "**Compare**\n\n"
+            "Run two tokenizers side-by-side on the same language "
+            "and see fertility, premium, and MBI differences."
+        )
+    with c3:
+        st.info(
+            "**Rank**\n\n"
+            "Leaderboard of multiple tokenizers — *coming soon*."
+        )
 
+    st.markdown("---")
+    st.subheader("Supported languages")
+    st.write(
+        "Afrikaans · English · isiXhosa · isiZulu · Sesotho · "
+        "Sepedi · Setswana · siSwati · Xitsonga"
+    )
 
+    st.subheader("Metrics")
+    m1, m2 = st.columns(2)
+    with m1:
+        st.markdown(
+            """
+            **Efficiency (FLORES-dev)**  
+            - **Token count** — total pieces produced  
+            - **Fertility** — tokens per word  
+            - **Compression** — UTF-8 bytes per token  
+            - **Token premium** — tokens(lang) / tokens(English) on parallel text  
+            """
+        )
+    with m2:
+        st.markdown(
+            """
+            **Linguistic (NCHLT)**  
+            - **Morphological Boundary Identification (MBI)**  
+            - Precision · Recall · F1  
+            - Gold morpheme cuts vs tokenizer cuts between characters  
+            """
+        )
 
-    # code to load the selected tokenizer using the AutoTokenizer class from the transformers library, and save it in the session state
-    if selected_tokenizer:
+    st.subheader("Datasets")
+    st.markdown(
+        """
+        | Dataset | Role |
+        |---------|------|
+        | **FLORES-dev** | Same 997 sentences translated into 9 SA languages — efficiency metrics |
+        | **NCHLT** | Linguist-annotated morpheme splits — morphological alignment |
 
-        st.info(f"Selected tokenizer: {selected_tokenizer}")  # shows the selected tokenizer in an info box
+        Use the top navigation to open **Inspect** or **Compare**.
+        """
+    )
 
-        if st.button("Load tokenizer", type="primary"): # if button is clicked, the tokenizer is loaded and saved in the session state
+# =============================================================================
+# INSPECT
+# =============================================================================
+elif selected == "Inspect":
+    st.markdown(
+        '<style>div.block-container{padding-top:1.5rem;}</style>',
+        unsafe_allow_html=True,
+    )
+    st.header("Inspect a tokenizer")
+    st.caption(
+        "Select a Hugging Face tokenizer, choose a language, and analyse "
+        "default corpora or your own text."
+    )
 
-            try:  # code to load the selected tokenizer using the AutoTokenizer class from the transformers library, and save it in the session state
-                with st.spinner(  # shows a spinner while the tokenizer is loading (the tokenizer code runs while the spinner displays the loading indicator)
-                    f"Loading {selected_tokenizer}..."
-                ):
-                    tokenizer = AutoTokenizer.from_pretrained(  # loads a tokenizer from the Hugging Face model hub using the model ID of the selected tokenizer
-                        selected_tokenizer
+    # --- Tokenizer selection ---
+    model_id = tokenizer_picker("Tokenizer", "inspect")
+    col_load, col_status = st.columns([1, 2])
+    with col_load:
+        if st.button("Load tokenizer", type="primary", key="inspect_load"):
+            if model_id:
+                load_and_store(model_id, "tokenizer", "tokenizer_name")
+            else:
+                st.warning("Select or enter a tokenizer ID first.")
+    with col_status:
+        if st.session_state.tokenizer_name:
+            st.success(f"Active: `{st.session_state.tokenizer_name}`")
+        else:
+            st.warning("No tokenizer loaded yet.")
+
+    st.markdown("---")
+
+    # --- Language & source ---
+    lang = st.selectbox("Language", LANGUAGE_NAMES, index=LANGUAGE_NAMES.index("isiZulu"))
+    source = st.radio(
+        "Analysis source",
+        ["Default FLORES corpus", "Manual text", "Upload text file"],
+        horizontal=True,
+    )
+
+    max_sent = st.slider("Max FLORES sentences", 50, 997, 150, 50)
+    max_morph = st.slider("Max NCHLT words (morphology)", 50, 2000, 400, 50)
+
+    # Source-specific inputs (shown before Run so values exist on click)
+    manual_text = ""
+    upload_text = ""
+    if source == "Manual text":
+        manual_text = st.text_area("Enter text to tokenize", height=160, key="inspect_manual_text")
+    elif source == "Upload text file":
+        up = st.file_uploader("Upload a UTF-8 `.txt` file", type=["txt"], key="inspect_up")
+        if up is not None:
+            upload_text = up.read().decode("utf-8", errors="replace")
+            st.caption(f"Loaded {len(upload_text):,} characters")
+
+    run = st.button("Run analysis", type="primary", key="inspect_run")
+
+    if run:
+        if st.session_state.tokenizer is None:
+            st.error("Load a tokenizer first.")
+        else:
+            tok = st.session_state.tokenizer
+            name = st.session_state.tokenizer_name
+
+            if source == "Default FLORES corpus":
+                with st.spinner("Tokenizing FLORES and computing metrics …"):
+                    efficiency, samples, n_sent = run_efficiency_on_flores(
+                        tok, lang, max_sent
                     )
+                    morphology = None
+                    if has_morphology(lang):
+                        morphology = run_morphology(tok, lang, max_morph)
 
-                st.session_state.tokenizer = tokenizer
-                st.session_state.tokenizer_name = selected_tokenizer
+                st.subheader(f"{lang} · `{name}`")
+                st.caption(f"FLORES sentences used: {n_sent}")
+                metric_row(efficiency, morphology)
 
-                st.success(   # shows a success message if the tokenizer is loaded successfully
-                    f"Successfully loaded {selected_tokenizer}"
+                st.markdown("#### Sample tokenizations")
+                for s in samples[:3]:
+                    with st.expander(
+                        f"{s['token_count']} tokens — {s['text'][:90]}…"
+                    ):
+                        show_token_chips(s["tokens"])
+
+            elif source == "Manual text":
+                text = manual_text or ""
+                if not text.strip():
+                    st.warning("Enter some text above, then click Run analysis.")
+                else:
+                    with st.spinner("Tokenizing …"):
+                        result = tokenize_text(tok, text)
+                        efficiency = compute_all(text, result["tokens"])
+                    st.subheader("Results")
+                    metric_row(efficiency)
+                    st.markdown("#### Tokens")
+                    show_token_chips(result["tokens"])
+                    st.markdown("#### Token IDs (first 40)")
+                    st.code(str(result["ids"][:40]))
+
+            else:  # Upload
+                text = upload_text or ""
+                if not text.strip():
+                    st.warning("Upload a UTF-8 text file above, then click Run analysis.")
+                else:
+                    with st.spinner("Analysing uploaded corpus …"):
+                        result = tokenize_text(tok, text)
+                        efficiency = compute_all(text, result["tokens"])
+                    st.subheader("Results")
+                    metric_row(efficiency)
+                    st.markdown("#### First tokens")
+                    show_token_chips(result["tokens"][:60])
+
+# =============================================================================
+# COMPARE
+# =============================================================================
+elif selected == "Compare":
+    st.markdown(
+        '<style>div.block-container{padding-top:1.5rem;}</style>',
+        unsafe_allow_html=True,
+    )
+    st.header("Compare two tokenizers")
+    st.caption("Side-by-side efficiency and morphological alignment on the same language.")
+
+    col_a, col_b = st.columns(2)
+    with col_a:
+        id_a = tokenizer_picker("Tokenizer A", "cmp_a")
+        if st.button("Load A", key="load_a"):
+            if id_a:
+                load_and_store(id_a, "tokenizer", "tokenizer_name")
+            else:
+                st.warning("Select tokenizer A.")
+        if st.session_state.tokenizer_name:
+            st.caption(f"A active: `{st.session_state.tokenizer_name}`")
+
+    with col_b:
+        id_b = tokenizer_picker("Tokenizer B", "cmp_b")
+        if st.button("Load B", key="load_b"):
+            if id_b:
+                load_and_store(id_b, "tokenizer_b", "tokenizer_b_name")
+            else:
+                st.warning("Select tokenizer B.")
+        if st.session_state.tokenizer_b_name:
+            st.caption(f"B active: `{st.session_state.tokenizer_b_name}`")
+
+    st.markdown("---")
+    lang = st.selectbox(
+        "Language",
+        LANGUAGE_NAMES,
+        index=LANGUAGE_NAMES.index("isiZulu"),
+        key="cmp_lang",
+    )
+    max_sent = st.slider("Max FLORES sentences", 50, 997, 100, 50, key="cmp_sent")
+    max_morph = st.slider("Max NCHLT words", 50, 2000, 300, 50, key="cmp_morph")
+
+    if st.button("Compare", type="primary", key="cmp_run"):
+        if st.session_state.tokenizer is None or st.session_state.tokenizer_b is None:
+            st.error("Load **both** tokenizers before comparing.")
+        else:
+            tok_a = st.session_state.tokenizer
+            tok_b = st.session_state.tokenizer_b
+            name_a = st.session_state.tokenizer_name
+            name_b = st.session_state.tokenizer_b_name
+
+            with st.spinner("Analysing both tokenizers …"):
+                eff_a, samples_a, n_a = run_efficiency_on_flores(tok_a, lang, max_sent)
+                eff_b, samples_b, n_b = run_efficiency_on_flores(tok_b, lang, max_sent)
+                morph_a = run_morphology(tok_a, lang, max_morph) if has_morphology(lang) else None
+                morph_b = run_morphology(tok_b, lang, max_morph) if has_morphology(lang) else None
+
+            st.subheader(f"Comparison on {lang}")
+            st.caption(f"FLORES sentences: {n_a}")
+
+            rows = []
+            for label, eff, morph in (
+                (f"A: {name_a}", eff_a, morph_a),
+                (f"B: {name_b}", eff_b, morph_b),
+            ):
+                row = {
+                    "Tokenizer": label,
+                    "Tokens": eff["token_count"],
+                    "Fertility": round(eff["fertility"], 3),
+                    "Compression": round(eff["compression"], 2),
+                    "Token premium": round(eff.get("token_premium", 0), 3),
+                }
+                if morph:
+                    row["MBI Precision"] = round(morph["precision"], 3)
+                    row["MBI Recall"] = round(morph["recall"], 3)
+                    row["MBI F1"] = round(morph["f1"], 3)
+                rows.append(row)
+            st.dataframe(pd.DataFrame(rows), use_container_width=True, hide_index=True)
+
+            # Bar chart
+            fig = go.Figure()
+            labels = ["A", "B"]
+            fig.add_trace(
+                go.Bar(
+                    name="Fertility",
+                    x=labels,
+                    y=[eff_a["fertility"], eff_b["fertility"]],
                 )
-
-            except OSError:  # shows an error message if the tokenizer could not be loaded, and resets the session state variables to None
-                st.session_state.tokenizer = None
-                st.session_state.tokenizer_name = None
-
-                st.error(
-                    f"{selected_tokenizer} is not a valid Hugging Face model/tokenizer ID. Please check the name and try again."
+            )
+            fig.add_trace(
+                go.Bar(
+                    name="Token premium",
+                    x=labels,
+                    y=[
+                        eff_a.get("token_premium", 0),
+                        eff_b.get("token_premium", 0),
+                    ],
                 )
-    
-            except Exception as e:  # shows an error message if the tokenizer could not be loaded, and resets the session state variables to None
-                st.session_state.tokenizer = None
-                st.session_state.tokenizer_name = None
-
-                st.error(
-                    f"{selected_tokenizer} is not a valid Hugging Face model/tokenizer ID. Please check the name and try again."
+            )
+            if morph_a and morph_b:
+                fig.add_trace(
+                    go.Bar(
+                        name="MBI F1",
+                        x=labels,
+                        y=[morph_a["f1"], morph_b["f1"]],
+                    )
                 )
+            fig.update_layout(
+                barmode="group",
+                title=f"Key metrics — {lang}",
+                height=380,
+                margin=dict(t=40, b=20),
+            )
+            st.plotly_chart(fig, use_container_width=True)
 
-                st.exception(e)
-    else:
-        st.warning("Please select a tokenizer or enter a model/tokenizer name to load.")
-        
+            st.markdown("#### Sample tokenizations")
+            for i in range(min(3, len(samples_a), len(samples_b))):
+                st.markdown(f"**Text:** {samples_a[i]['text'][:120]}…")
+                ca, cb = st.columns(2)
+                with ca:
+                    st.caption(f"A · {samples_a[i]['token_count']} tokens · `{name_a}`")
+                    show_token_chips(samples_a[i]["tokens"])
+                with cb:
+                    st.caption(f"B · {samples_b[i]['token_count']} tokens · `{name_b}`")
+                    show_token_chips(samples_b[i]["tokens"])
 
-elif selected ==  "Compare":
-    st.title(f"You are on page {selected}")
-    st.markdown('<style>div.block-container{padding-top:2rem;}</style>',unsafe_allow_html=True)  # padding for the web page
-
-    
+# =============================================================================
+# RANK (skipped for now)
+# =============================================================================
 elif selected == "Rank":
-    st.title(f"You are on page {selected}")
-    st.markdown('<style>div.block-container{padding-top:2rem;}</style>',unsafe_allow_html=True)  # padding for the web page
+    st.markdown(
+        '<style>div.block-container{padding-top:1.5rem;}</style>',
+        unsafe_allow_html=True,
+    )
+    st.header("Rank")
+    st.info(
+        "The **Rank / leaderboard** feature is not implemented yet. "
+        "Use **Inspect** and **Compare** for now."
+    )
 
-
+# -----------------------------------------------------------------------------
+# Footer
+# -----------------------------------------------------------------------------
+st.markdown("---")
+st.caption(
+    "TAD · CSC3003S Capstone · Efficiency on FLORES-dev · "
+    "Morphological Boundary Identification on NCHLT"
+)
