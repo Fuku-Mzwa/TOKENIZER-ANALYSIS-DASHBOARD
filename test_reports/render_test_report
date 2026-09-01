@@ -1,0 +1,20 @@
+RESULT RENDERING TESTS:
+
+TEST FILE: test_render_results.py
+TESTING FRAMEWORK: Python unittest
+TESTS EXECUTED: 31
+TESTS PASSED: 31
+TESTS FAILED: 0
+
+Covered modules/functions:
+  render_helpers.format_token_chips
+  render_helpers.format_efficiency_metrics
+  render_helpers.format_morphology_metrics
+  render_helpers.build_comparison_rows
+  render_helpers.build_comparison_chart_data
+  render_helpers.format_sample_header
+  render_helpers.format_token_ids_preview
+  Capstone5 show_token_chips / metric_row (via pure helpers + display contract tests)
+
+Run command:
+  python3 -m unittest tests.test_render_results -v
