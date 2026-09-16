@@ -167,6 +167,14 @@ def run_efficiency_on_flores(tokenizer, language: str, max_sentences: int):
     return metrics, samples, len(sentences)
 
 
+def run_efficiency_multi(tokenizer, languages , max_sentences):
+    results = {}
+    for lang in languages:
+        eff, samples, n = run_efficiency_on_flores(tokenizer, lang, max_sentences)
+        results[lang] = {"efficiency": eff, "samples": samples, "n_sentences": n}
+    return results 
+
+    
 def run_morphology(tokenizer, language: str, max_words: int):
     # No NCHLT gold for some languages — caller should treat None as "skip MBI"
     if not has_morphology(language):
@@ -174,6 +182,12 @@ def run_morphology(tokenizer, language: str, max_words: int):
     gold = load_nchlt_gold(language)
     return evaluate_corpus(tokenizer, gold, max_words=max_words)
 
+def run_morphology_multi(tokenizer, languages, max_words):
+    results = {}
+    for lang in languages:
+        if has_morphology(lang):
+            results[lang] = run_morphology(tokenizer, lang, max_words)
+    return results
 
 # -----------------------------------------------------------------------------
 # Navigation
@@ -313,7 +327,7 @@ elif selected == "Inspect":
 
     # --- Language & source ---
     # Default to isiZulu so MBI is available out of the box in demos
-    lang = st.selectbox("Language", LANGUAGE_NAMES, index=LANGUAGE_NAMES.index("isiZulu"))
+    langs = st.multiselect("Languages", LANGUAGE_NAMES, default=["isiZulu"])
     source = st.radio(
         "Analysis source",
         ["Default FLORES corpus", "Manual text", "Upload text file"],
@@ -341,32 +355,35 @@ elif selected == "Inspect":
     if run:
         if st.session_state.tokenizer is None:
             st.error("Load a tokenizer first.")
+        elif not langs:
+            st.warning("Select at least one language.")
         else:
             tok = st.session_state.tokenizer
             name = st.session_state.tokenizer_name
 
             if source == "Default FLORES corpus":
                 with st.spinner("Tokenizing FLORES and computing metrics …"):
-                    efficiency, samples, n_sent = run_efficiency_on_flores(
-                        tok, lang, max_sent
-                    )
-                    morphology = None
-                    # Only languages with NCHLT files get boundary scores
-                    if has_morphology(lang):
-                        morphology = run_morphology(tok, lang, max_morph)
+                    eff_results = run_efficiency_multi(tok, langs, max_sent)
+                    morph_results = run_morphology_multi(tok, langs, max_morph)
 
-                st.subheader(f"{lang} · `{name}`")
-                st.caption(f"FLORES sentences used: {n_sent}")
-                # Numbers first
-                metric_row(efficiency, morphology)
+                for lang in langs:
+                    result = eff_results[lang]
+                    morphology = morph_results.get(lang)
 
-                # Then a few expandable examples of actual splits
-                st.markdown("#### Sample tokenizations")
-                for s in samples[:3]:
-                    with st.expander(
-                        f"{s['token_count']} tokens — {s['text'][:90]}…"
-                    ):
-                        show_token_chips(s["tokens"])
+                    st.subheader(f"{lang} . '{name}'")
+                    st.caption(f"FLORES sentences used: {result['n_sentences']}")
+                    metric_row(result["efficiency"], morphology)
+
+                    st.markdown("### Sample tokenizations")
+                    for s in result["samples"][:3]:
+                        with st.expander(
+                            f"{s['token_count']} tokens - {s['text'][:90]}..."
+                        ):
+                            show_token_chips(s["tokens"])
+                    
+                    st.markdown("---")
+
+                
 
             elif source == "Manual text":
                 text = manual_text or ""
@@ -433,10 +450,10 @@ elif selected == "Compare":
             st.caption(f"B active: `{st.session_state.tokenizer_b_name}`")
 
     st.markdown("---")
-    lang = st.selectbox(
-        "Language",
+    langs = st.multiselect(
+        "Languages",
         LANGUAGE_NAMES,
-        index=LANGUAGE_NAMES.index("isiZulu"),
+        default=["isiZulu"],
         key="cmp_lang",
     )
     max_sent = st.slider("Max FLORES sentences", 50, 997, 100, 50, key="cmp_sent")
@@ -445,6 +462,8 @@ elif selected == "Compare":
     if st.button("Compare", type="primary", key="cmp_run"):
         if st.session_state.tokenizer is None or st.session_state.tokenizer_b is None:
             st.error("Load **both** tokenizers before comparing.")
+        elif not langs:
+            st.warning("Select at least one language.")
         else:
             tok_a = st.session_state.tokenizer
             tok_b = st.session_state.tokenizer_b
@@ -453,22 +472,40 @@ elif selected == "Compare":
 
             # Same language + same sentence budget for a fair comparison
             with st.spinner("Analysing both tokenizers …"):
-                eff_a, samples_a, n_a = run_efficiency_on_flores(tok_a, lang, max_sent)
-                eff_b, samples_b, n_b = run_efficiency_on_flores(tok_b, lang, max_sent)
-                morph_a = run_morphology(tok_a, lang, max_morph) if has_morphology(lang) else None
-                morph_b = run_morphology(tok_b, lang, max_morph) if has_morphology(lang) else None
+                eff_a_multi = run_efficiency_multi(tok_a, langs, max_sent)
+                eff_b_multi = run_efficiency_multi(tok_b, langs, max_sent)
+                morph_a_multi = run_morphology_multi(tok_a, langs, max_morph) 
+                morph_b_multi = run_morphology_multi(tok_b, langs, max_morph) 
+            
+            st.session_state["cmp_results"] = {
+                "langs": langs,
+                "name_a": name_a,
+                "name_b": name_b,
+                "eff_a_multi": eff_a_multi,
+                "eff_b_multi": eff_b_multi,
+                "morph_a_multi": morph_a_multi,
+                "morph_b_multi": morph_b_multi,
+            }
 
-            st.subheader(f"Comparison on {lang}")
-            st.caption(f"FLORES sentences: {n_a}")
+    if "cmp_results" in st.session_state:
+        r =  st.session_state["cmp_results"]
+        langs = r["langs"]
+        name_a, name_b = r["name_a"], r["name_b"]
+        eff_a_multi, eff_b_multi = r["eff_a_multi"], r["eff_b_multi"]
+        morph_a_multi, morph_b_multi = r["morph_a_multi"], r["morph_b_multi"]
 
-            # Build a small table: one row per tokenizer
-            rows = []
-            for label, eff, morph in (
-                (f"A: {name_a}", eff_a, morph_a),
-                (f"B: {name_b}", eff_b, morph_b),
+        st.subheader("Comparison")
+
+        # Build a small table: one row per tokenizer
+        rows = []
+        for lang in langs:
+            for label, name, eff, morph in (
+                ("A", name_a, eff_a_multi[lang]["efficiency"], morph_a_multi.get(lang)),
+                ("B", name_b,  eff_b_multi[lang]["efficiency"], morph_b_multi.get(lang)),
             ):
                 row = {
-                    "Tokenizer": label,
+                    "Language": lang,
+                    "Tokenizer": f"{label}: {name}",
                     "Tokens": eff["token_count"],
                     "Fertility": round(eff["fertility"], 3),
                     "Compression": round(eff["compression"], 2),
@@ -479,46 +516,49 @@ elif selected == "Compare":
                     row["MBI Recall"] = round(morph["recall"], 3)
                     row["MBI F1"] = round(morph["f1"], 3)
                 rows.append(row)
-            st.dataframe(pd.DataFrame(rows), use_container_width=True, hide_index=True)
+        st.dataframe(pd.DataFrame(rows), use_container_width=True, hide_index=True)
 
-            # Grouped bars for the metrics people care about most in a demo
-            fig = go.Figure()
-            labels = ["A", "B"]
-            fig.add_trace(
-                go.Bar(
-                    name="Fertility",
-                    x=labels,
-                    y=[eff_a["fertility"], eff_b["fertility"]],
-                )
-            )
-            fig.add_trace(
-                go.Bar(
-                    name="Token premium",
-                    x=labels,
-                    y=[
-                        eff_a.get("token_premium", 0),
-                        eff_b.get("token_premium", 0),
-                    ],
-                )
-            )
-            if morph_a and morph_b:
-                fig.add_trace(
-                    go.Bar(
-                        name="MBI F1",
-                        x=labels,
-                        y=[morph_a["f1"], morph_b["f1"]],
-                    )
-                )
-            fig.update_layout(
-                barmode="group",
-                title=f"Key metrics — {lang}",
-                height=380,
-                margin=dict(t=40, b=20),
-            )
-            st.plotly_chart(fig, use_container_width=True)
+        # Grouped bars for the metrics people care about most in a demo
+        metric_options = ["Fertility", "Compression" , "Token premium"]
+        if any(has_morphology(l) for l in langs):
+            metric_options.append("MBI F1")
+        
+        metric = st.selectbox("Metric to plot", metric_options, key="cmp_metric")
 
-            # Same sentences, two tokenizations — makes differences concrete
-            st.markdown("#### Sample tokenizations")
+        metric_key = {
+            "Fertility": "fertility",
+            "Compression": "compression",
+            "Token premium": "token_premium",
+        }
+
+        if metric == "MBI F1":
+            # Only languages with NCHLT gold data can plot F1
+            chart_langs = [l for l in langs if has_morphology(l)]
+            y_a = [morph_a_multi[l]["f1"] for l in chart_langs]
+            y_b = [morph_b_multi[l]["f1"] for l in chart_langs]
+        else:
+            chart_langs = langs
+            key = metric_key[metric]
+            y_a = [eff_a_multi[l]["efficiency"].get(key, 0) for l in chart_langs]
+            y_b = [eff_b_multi[l]["efficiency"].get(key, 0) for l in chart_langs]
+
+        fig = go.Figure()
+        fig.add_trace(go.Bar(name=f"A: {name_a}", x=chart_langs, y=y_a))
+        fig.add_trace(go.Bar(name=f"B: {name_b}", x=chart_langs, y=y_b))
+        fig.update_layout(
+            barmode="group",
+            title=f"{metric} by language",
+            height=380,
+            margin=dict(t=40, b=20),
+        )
+        st.plotly_chart(fig, use_container_width=True)
+
+       
+        st.markdown("#### Sample tokenizations")
+        for lang in langs:
+            samples_a = eff_a_multi[lang]["samples"]
+            samples_b = eff_b_multi[lang]["samples"]
+            st.markdown(f"**{lang}**")
             for i in range(min(3, len(samples_a), len(samples_b))):
                 st.markdown(f"**Text:** {samples_a[i]['text'][:120]}…")
                 ca, cb = st.columns(2)
@@ -528,7 +568,7 @@ elif selected == "Compare":
                 with cb:
                     st.caption(f"B · {samples_b[i]['token_count']} tokens · `{name_b}`")
                     show_token_chips(samples_b[i]["tokens"])
-
+            st.markdown("---")
 # =============================================================================
 # RANK (skipped for now)
 # =============================================================================
