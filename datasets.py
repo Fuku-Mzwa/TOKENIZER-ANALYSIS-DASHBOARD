@@ -11,7 +11,6 @@ NCHLT_DIR = BASE_DIR / "data" / "NCHLT"
 
 # Display name -> (code, FLORES filename, NCHLT filename or None)
 LANGUAGES = {
-    "Afrikaans": ("afr", "afr_Latn.dev", None),
     "English": ("eng", "eng_Latn.dev", None),
     "isiXhosa": ("xho", "xho_Latn.dev", "xho.txt"),
     "isiZulu": ("zul", "zul_Latn.dev", "zul.txt"),
