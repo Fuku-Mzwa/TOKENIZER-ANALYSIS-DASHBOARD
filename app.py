@@ -334,9 +334,17 @@ elif selected == "Inspect":
         horizontal=True,
     )
 
-    # Smaller limits = faster interactive runs; user can raise them
-    max_sent = st.slider("Max FLORES sentences", 50, 997, 150, 50)
-    max_morph = st.slider("Max NCHLT words (morphology)", 50, 2000, 400, 50)
+
+    # Uploading the whole dataset
+    use_full = st.checkbox("Use full dataset", key="inspect_full")
+    if use_full:
+        max_sent = None
+        max_morph = None
+    else:
+        # Smaller limits = faster interactive runs; user can raise them
+        max_sent = st.slider("Max FLORES sentences", 50, 997, 150, 50)
+        max_morph = st.slider("Max NCHLT words (morphology)", 50, 2000, 400, 50)
+
 
     # Source-specific inputs (shown before Run so values exist on click)
     manual_text = ""
@@ -362,7 +370,12 @@ elif selected == "Inspect":
             name = st.session_state.tokenizer_name
 
             if source == "Default FLORES corpus":
-                with st.spinner("Tokenizing FLORES and computing metrics …"):
+                spinner_msg = (
+                    "Tokenizing full dataset - this may take a while ..."
+                    if max_sent is None
+                    else "Tokenizing FLORES and computing metrics ..."
+                )
+                with st.spinner(spinner_msg):
                     eff_results = run_efficiency_multi(tok, langs, max_sent)
                     morph_results = run_morphology_multi(tok, langs, max_morph)
 
@@ -456,8 +469,13 @@ elif selected == "Compare":
         default=["isiZulu"],
         key="cmp_lang",
     )
-    max_sent = st.slider("Max FLORES sentences", 50, 997, 100, 50, key="cmp_sent")
-    max_morph = st.slider("Max NCHLT words", 50, 2000, 300, 50, key="cmp_morph")
+    use_full = st.checkbox("Use full dataset", key="cmp_full")
+    if use_full:
+        max_sent = None
+        max_morph = None
+    else:
+        max_sent = st.slider("Max FLORES sentences", 50, 997, 100, 50, key="cmp_sent")
+        max_morph = st.slider("Max NCHLT words", 50, 2000, 300, 50, key="cmp_morph")
 
     if st.button("Compare", type="primary", key="cmp_run"):
         if st.session_state.tokenizer is None or st.session_state.tokenizer_b is None:
@@ -470,8 +488,13 @@ elif selected == "Compare":
             name_a = st.session_state.tokenizer_name
             name_b = st.session_state.tokenizer_b_name
 
+            spinner_msg = (
+                "Tokenizing full dataset for both tokenizers - this may take a while ..."
+                if max_sent is None
+                else "Analysing both tokenizers ..."
+            )
             # Same language + same sentence budget for a fair comparison
-            with st.spinner("Analysing both tokenizers …"):
+            with st.spinner(spinner_msg):
                 eff_a_multi = run_efficiency_multi(tok_a, langs, max_sent)
                 eff_b_multi = run_efficiency_multi(tok_b, langs, max_sent)
                 morph_a_multi = run_morphology_multi(tok_a, langs, max_morph) 
