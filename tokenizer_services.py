@@ -5,7 +5,9 @@ import logging
 import re
 from typing import Any, Dict, List
 
+from huggingface_hub.errors import GatedRepoError
 from transformers import AutoTokenizer
+
 
 logger = logging.getLogger(__name__)
 
@@ -21,25 +23,17 @@ def load_tokenizer(model_id: str, use_fast: bool = True):
         raise ValueError("Tokenizer identifier cannot be empty.")
 
     model_id = str(model_id).strip()
-
     if model_id in TOKENIZER_CACHE:
         return TOKENIZER_CACHE[model_id]
+    tokenizer = AutoTokenizer.from_pretrained(
+        model_id,
+        use_fast=use_fast,
+        trust_remote_code=True,
+    )
+    TOKENIZER_CACHE[model_id] = tokenizer
+    logger.info("Loaded tokenizer: %s", model_id)
+    return tokenizer
 
-    try:
-        tokenizer = AutoTokenizer.from_pretrained(
-            model_id,
-            use_fast=use_fast,
-            trust_remote_code=True,
-        )
-        TOKENIZER_CACHE[model_id] = tokenizer
-        logger.info("Loaded tokenizer: %s", model_id)
-        return tokenizer
-    except Exception as e:
-        logger.exception("Failed to load tokenizer %s", model_id)
-        raise ValueError(
-            f"Could not load tokenizer '{model_id}'. "
-            f"Please check the Hugging Face model ID. Error: {e}"
-        ) from e
 
 
 def clear_tokenizer_cache() -> None:
