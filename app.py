@@ -15,6 +15,7 @@ import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
 from streamlit_option_menu import option_menu
+from huggingface_hub.errors import GatedRepoError
 
 # Data loaders + language list (FLORES / NCHLT)
 from datasets import (
@@ -51,8 +52,7 @@ POPULAR_TOKENIZERS = {
     "DistilBERT (multilingual)": "distilbert-base-multilingual-cased",
     "GPT-2": "gpt2",
     "RoBERTa": "roberta-base",
-    "T5": "google-t5/t5-base",
-    "Llama 3.2 1B": "meta-llama/Llama-3.2-1B",
+    "T5": "google-t5/t5-base"
 }
 
 # -----------------------------------------------------------------------------
@@ -136,15 +136,29 @@ def load_and_store(model_id: str, state_tok_key: str, state_name_key: str) -> bo
     try:
         with st.spinner(f"Loading `{model_id}` …"):
             tok = load_tokenizer(model_id)
-        st.session_state[state_tok_key] = tok
-        st.session_state[state_name_key] = model_id
+            st.session_state[state_tok_key] = tok
+            st.session_state[state_name_key] = model_id
         st.success(f"Loaded **{model_id}**")
         return True
-    except ValueError as e:
-        # Bad id or download failure — clear any half-set state
+    except (OSError, ValueError) as e:
+        error_message = str(e).lower()
         st.session_state[state_tok_key] = None
         st.session_state[state_name_key] = None
-        st.error(str(e))
+        # Handles gated repo errors separately for a clearer message
+        if "gated repo" in error_message or "access to model" in error_message:
+            st.warning(f"🔒 Tokenizer '{model_id}' is gated. "
+                    "You need permission from Hugging Face to access this model.")
+            return False
+        # Handles other errors (e.g., invalid model id) with a generic message
+        else:
+            st.error(f"❌ Could not load tokenizer '{model_id}'. "
+                    f"Please check the Hugging Face model ID.")
+        return False
+    except Exception as e:
+        st.session_state[state_tok_key] = None
+        st.session_state[state_name_key] = None
+        st.error(f"❌ An unexpected error occurred while loading tokenizer '{model_id}': {e}."
+                 " Please try again.")
         return False
 
 
@@ -253,7 +267,7 @@ if selected == "Home":
     st.markdown("---")
     st.subheader("Supported languages")
     st.write(
-        "Afrikaans · English · isiXhosa · isiZulu · Sesotho · "
+        "English · isiXhosa · isiZulu · Sesotho · "
         "Sepedi · Setswana · siSwati · Xitsonga"
     )
 
@@ -313,7 +327,8 @@ elif selected == "Inspect":
     with col_load:
         if st.button("Load tokenizer", type="primary", key="inspect_load"):
             if model_id:
-                load_and_store(model_id, "tokenizer", "tokenizer_name")
+                if load_and_store(model_id, "tokenizer", "tokenizer_name"):
+                    st.rerun()
             else:
                 st.warning("Select or enter a tokenizer ID first.")
     with col_status:
@@ -446,7 +461,8 @@ elif selected == "Compare":
         id_a = tokenizer_picker("Tokenizer A", "cmp_a")
         if st.button("Load A", key="load_a"):
             if id_a:
-                load_and_store(id_a, "tokenizer", "tokenizer_name")
+                if load_and_store(id_a, "tokenizer", "tokenizer_name"):
+                    st.rerun()
             else:
                 st.warning("Select tokenizer A.")
         if st.session_state.tokenizer_name:
@@ -456,7 +472,8 @@ elif selected == "Compare":
         id_b = tokenizer_picker("Tokenizer B", "cmp_b")
         if st.button("Load B", key="load_b"):
             if id_b:
-                load_and_store(id_b, "tokenizer_b", "tokenizer_b_name")
+                if load_and_store(id_b, "tokenizer_b", "tokenizer_b_name"):
+                    st.rerun()
             else:
                 st.warning("Select tokenizer B.")
         if st.session_state.tokenizer_b_name:
