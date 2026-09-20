@@ -42,6 +42,7 @@ import logging
 import re
 from typing import Any, Dict, List
 
+from huggingface_hub.errors import GatedRepoError
 from transformers import AutoTokenizer
 
 logger = logging.getLogger(__name__)
@@ -58,47 +59,20 @@ _MARKER_PREFIXES = ("##", " ", "Ġ", "Ċ", "\u0120")
 
 
 def load_tokenizer(model_id: str, use_fast: bool = True):
-    """
-    Load a Hugging Face tokenizer by model ID with in-memory caching and error sanitization.
-
-    Why trust_remote_code=True?
-    Modern African and multilingual language models (such as AfroLM or custom regional models)
-    frequently package custom tokenizer code in their HF repositories.
-
-    Why use_fast=True?
-    Rust-based fast tokenizers drastically reduce tokenization time across large corpora
-    (e.g., FLORES 997 sentences), minimizing UI lag.
-    """
+    #Load a Hugging Face tokenizer by model ID (cached).
     if model_id is None or not str(model_id).strip():
         raise ValueError("Tokenizer identifier cannot be empty.")
-
     model_id = str(model_id).strip()
-
-    # Return cached tokenizer instance immediately if already loaded
     if model_id in TOKENIZER_CACHE:
         return TOKENIZER_CACHE[model_id]
-
-    try:
-        tokenizer = AutoTokenizer.from_pretrained(
-            model_id,
-            use_fast=use_fast,
-            trust_remote_code=True,
-        )
-        TOKENIZER_CACHE[model_id] = tokenizer
-        logger.info("Loaded tokenizer: %s", model_id)
-        return tokenizer
-    except Exception as e:
-        # Developer Logging Retention:
-        # Preserves the complete traceback, exception type, and HTTP details in the backend console
-        # so engineers can immediately diagnose network drops, bad tokens, or repo errors.
-        logger.exception("Failed to load tokenizer %s: %s", model_id, e)
-        # User-Safe Error Sanitization:
-        # Raises an actionable, jargon-free message. `from None` prevents Python from appending
-        # internal call stacks, ensuring the UI receives a pristine notification string.
-        raise ValueError(
-            f"Unable to load tokenizer '{model_id}'. "
-            f"Please check the model ID or internet connection."
-        ) from None
+    tokenizer = AutoTokenizer.from_pretrained(
+        model_id,
+        use_fast=use_fast,
+        trust_remote_code=True,
+    )
+    TOKENIZER_CACHE[model_id] = tokenizer
+    logger.info("Loaded tokenizer: %s", model_id)
+    return tokenizer
 
 
 def clear_tokenizer_cache() -> None:
@@ -106,17 +80,19 @@ def clear_tokenizer_cache() -> None:
 
 
 def tokenize_text(tokenizer, text: str) -> Dict[str, Any]:
-    """Tokenize text; return tokens, ids, and basic counts."""
+    #Tokenize text; return tokens, ids, and basic counts.
     if text is None:
         text = ""
     text = str(text)
 
+    offsets = []
     try:
-        encoded = tokenizer(text, add_special_tokens=False, return_tensors=None)
+        encoded = tokenizer(text, add_special_tokens=False, return_offsets_mapping=True, return_tensors=None)
         ids = encoded["input_ids"]
         if isinstance(ids, list) and ids and isinstance(ids[0], list):
             ids = ids[0]
         tokens = tokenizer.convert_ids_to_tokens(ids)
+        offsets = encoded.get("offset_mapping", [])
     except Exception:
         tokens = tokenizer.tokenize(text)
         ids = tokenizer.convert_tokens_to_ids(tokens)
@@ -127,11 +103,12 @@ def tokenize_text(tokenizer, text: str) -> Dict[str, Any]:
         "token_count": len(tokens),
         "char_count": len(text),
         "byte_count": len(text.encode("utf-8")),
+        "offsets": offsets,
     }
 
 
 def clean_token_surface(token: str) -> str:
-    """Strip common subword markers so len() reflects surface characters."""
+    #Strip common subword markers so len() reflects surface characters.
     if token is None:
         return ""
     t = str(token)
@@ -147,19 +124,16 @@ def clean_token_surface(token: str) -> str:
 def get_token_boundary_positions(tokens: List[str], word: str) -> set:
     """
     Map tokenizer pieces onto character offsets inside `word`.
-
     Returns the set of boundary positions measured as the number of
     characters consumed so far (1 .. len(word)-1), matching MBI.py.
     """
     boundaries = set()
     char_count = 0
     surfaces = [clean_token_surface(t) for t in tokens]
-
     for i, surface in enumerate(surfaces[:-1]):
         char_count += len(surface)
         if 0 < char_count < len(word):
             boundaries.add(char_count)
-
     # Fallback: if reconstruction overshoots / undershoots badly, try
     # equal-split approximation so metrics still run
     if not boundaries and len(tokens) > 1 and len(word) > 1:
@@ -171,5 +145,4 @@ def get_token_boundary_positions(tokens: List[str], word: str) -> set:
             pos = int(round(acc / total * len(word)))
             if 0 < pos < len(word):
                 boundaries.add(pos)
-
     return boundaries
