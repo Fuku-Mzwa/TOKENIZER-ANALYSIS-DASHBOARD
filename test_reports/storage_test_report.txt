@@ -1,0 +1,42 @@
+TEST FILE: test_storage.py
+TESTING FRAMEWORK: Python unittest
+TESTS EXECUTED: 17
+TESTS PASSED: 17
+TESTS FAILED: 0
+test_add_new_entry (__main__.TestStorageBasicCRUD.test_add_new_entry)
+add_or_update_entry adds a new tokenizer entry to the leaderboard. ... ok
+test_clear_leaderboard (__main__.TestStorageBasicCRUD.test_clear_leaderboard)
+clear_leaderboard removes all entries from disk, returning an empty store. ... ok
+test_remove_existing_entry (__main__.TestStorageBasicCRUD.test_remove_existing_entry)
+remove_entry removes entry matching model_id and persists to disk. ... ok
+test_remove_nonexistent_entry (__main__.TestStorageBasicCRUD.test_remove_nonexistent_entry)
+remove_entry with unknown model_id leaves leaderboard intact without error. ... ok
+test_save_and_load_leaderboard (__main__.TestStorageBasicCRUD.test_save_and_load_leaderboard)
+save_leaderboard persists entries to disk; load_leaderboard reads them back. ... ok
+test_update_existing_entry (__main__.TestStorageBasicCRUD.test_update_existing_entry)
+add_or_update_entry updates existing model_id without creating a duplicate. ... ok
+test_auto_create_nested_parent_directories (__main__.TestStorageBoundariesAndFaultTolerance.test_auto_create_nested_parent_directories)
+Saving to a deeply nested directory path creates intermediate directories. ... ok
+test_large_payload_handling (__main__.TestStorageBoundariesAndFaultTolerance.test_large_payload_handling)
+Leaderboard with 50 tokenizers serializes and reloads accurately. ... ok
+test_load_corrupted_json_syntax_error (__main__.TestStorageBoundariesAndFaultTolerance.test_load_corrupted_json_syntax_error)
+Loading a corrupted JSON file must recover gracefully and return [] without crashing. ... ok
+test_load_empty_file_zero_bytes (__main__.TestStorageBoundariesAndFaultTolerance.test_load_empty_file_zero_bytes)
+Loading a 0-byte file must return [] without raising JSONDecodeError. ... ok
+test_load_nonexistent_file (__main__.TestStorageBoundariesAndFaultTolerance.test_load_nonexistent_file)
+Loading a non-existent file must return [] rather than raising FileNotFoundError. ... ok
+test_load_unexpected_root_type (__main__.TestStorageBoundariesAndFaultTolerance.test_load_unexpected_root_type)
+If JSON contains a primitive or unexpected type (e.g. integer or string), return []. ... ok
+test_model_id_with_special_characters (__main__.TestStorageBoundariesAndFaultTolerance.test_model_id_with_special_characters)
+Model IDs with slashes, colons, dots, and hyphens must be stored faithfully. ... ok
+test_save_empty_list (__main__.TestStorageBoundariesAndFaultTolerance.test_save_empty_list)
+save_leaderboard([]) must cleanly persist an empty store. ... ok
+test_sequential_updates_integrity (__main__.TestStorageBoundariesAndFaultTolerance.test_sequential_updates_integrity)
+Executing multiple add_or_update_entry operations sequentially maintains valid state. ... ok
+test_schema_preserves_nested_structures (__main__.TestStoragePersistenceAndSchema.test_schema_preserves_nested_structures)
+Verify complex per-language metrics and nested structures survive serialization. ... ok
+test_storage_file_is_valid_json_on_disk (__main__.TestStoragePersistenceAndSchema.test_storage_file_is_valid_json_on_disk)
+Storage file on disk must be human-readable and standard JSON. ... ok
+----------------------------------------------------------------------
+Ran 17 tests in 0.024s
+OK

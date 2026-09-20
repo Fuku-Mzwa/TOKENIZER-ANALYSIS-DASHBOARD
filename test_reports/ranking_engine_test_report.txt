@@ -1,0 +1,68 @@
+TEST FILE: test_ranking_engine.py
+TESTING FRAMEWORK: Python unittest
+TESTS EXECUTED: 30
+TESTS PASSED: 30
+TESTS FAILED: 0
+test_composite_score_breakdown_schema (__main__.TestCompositeWeighting.test_composite_score_breakdown_schema)
+Returns required breakdown dictionary structure per PROJECT.md interface contract. ... ok
+test_composite_score_equal_weighting_balance (__main__.TestCompositeWeighting.test_composite_score_equal_weighting_balance)
+When efficiency and linguistic scores are both available, each contributes 50%. ... ok
+test_composite_score_scale_range (__main__.TestCompositeWeighting.test_composite_score_scale_range)
+Overall score must be within [0.0, 100.0]. ... ok
+test_custom_weights_support (__main__.TestCompositeWeighting.test_custom_weights_support)
+Custom weights must be respected when passed. ... ok
+test_superior_tokenizer_scores_higher (__main__.TestCompositeWeighting.test_superior_tokenizer_scores_higher)
+A tokenizer with lower fertility, higher compression, and higher F1 must score higher. ... ok
+test_inversion_boundary_extremes (__main__.TestDirectionalityInversion.test_inversion_boundary_extremes)
+Check 0.0, 0.5, and 1.0 boundary values for lower-is-better. ... ok
+test_invert_fertility_lower_is_better (__main__.TestDirectionalityInversion.test_invert_fertility_lower_is_better)
+Fertility: lower is better. Normalized 0.2 (low fertility) -> 0.8 (desirable). ... ok
+test_invert_token_count_lower_is_better (__main__.TestDirectionalityInversion.test_invert_token_count_lower_is_better)
+Token count: lower is better. Normalized 0.1 -> 0.9. ... ok
+test_invert_token_premium_lower_is_better (__main__.TestDirectionalityInversion.test_invert_token_premium_lower_is_better)
+Token premium: lower is better. Normalized 0.35 -> 0.65. ... ok
+test_preserve_compression_higher_is_better (__main__.TestDirectionalityInversion.test_preserve_compression_higher_is_better)
+Compression: higher is better. Value must NOT be inverted. ... ok
+test_preserve_mbi_f1_higher_is_better (__main__.TestDirectionalityInversion.test_preserve_mbi_f1_higher_is_better)
+MBI F1: higher is better. Value must NOT be inverted. ... ok
+test_preserve_mbi_precision_and_recall_higher_is_better (__main__.TestDirectionalityInversion.test_preserve_mbi_precision_and_recall_higher_is_better)
+MBI Precision and Recall: higher is better. ... ok
+test_normalize_above_max_clamped (__main__.TestMetricNormalization.test_normalize_above_max_clamped)
+Values above the maximum anchor bound must be clamped to 1.0. ... ok
+test_normalize_at_maximum_bound (__main__.TestMetricNormalization.test_normalize_at_maximum_bound)
+A metric value at the upper bound should normalize to exactly 1.0. ... ok
+test_normalize_at_minimum_bound (__main__.TestMetricNormalization.test_normalize_at_minimum_bound)
+A metric value at the lower bound should normalize to exactly 0.0. ... ok
+test_normalize_below_min_clamped (__main__.TestMetricNormalization.test_normalize_below_min_clamped)
+Values below the minimum anchor bound must be clamped to 0.0. ... ok
+test_normalize_compression_midpoint (__main__.TestMetricNormalization.test_normalize_compression_midpoint)
+Compression range is typically [1.0, 6.0]. A value of 3.5 should normalize to 0.5. ... ok
+test_normalize_fertility_midpoint (__main__.TestMetricNormalization.test_normalize_fertility_midpoint)
+Fertility standard range is typically [1.0, 5.0]. A value of 3.0 should normalize to 0.5. ... ok
+test_normalize_linguistic_metrics (__main__.TestMetricNormalization.test_normalize_linguistic_metrics)
+MBI metrics (precision, recall, f1) natively live in [0.0, 1.0]. ... ok
+test_normalize_token_count_scale (__main__.TestMetricNormalization.test_normalize_token_count_scale)
+Token count typically ranges into thousands. Scale disparity must normalize to [0.0, 1.0]. ... ok
+test_rank_preserves_existing_keys (__main__.TestRankOrdering.test_rank_preserves_existing_keys)
+Existing metadata keys (e.g. added_at, languages) must be preserved after ranking. ... ok
+test_rank_tokenizers_order (__main__.TestRankOrdering.test_rank_tokenizers_order)
+Entries must be sorted descending by overall_score with ranks 1, 2, 3. ... ok
+test_rank_tokenizers_with_precomputed_scores (__main__.TestRankOrdering.test_rank_tokenizers_with_precomputed_scores)
+If overall_score is already present in entries, rank_tokenizers sorts directly. ... ok
+test_all_zero_metrics_handling (__main__.TestRankingBoundariesAndFallbacks.test_all_zero_metrics_handling)
+Zero values across all metrics should compute cleanly without ZeroDivisionError. ... ok
+test_degenerate_normalization_bounds_no_zero_division (__main__.TestRankingBoundariesAndFallbacks.test_degenerate_normalization_bounds_no_zero_division)
+When min bound equals max bound, normalizer must not raise ZeroDivisionError. ... ok
+test_empty_leaderboard_ranking (__main__.TestRankingBoundariesAndFallbacks.test_empty_leaderboard_ranking)
+Empty list input must return empty list [] without error. ... ok
+test_extreme_scale_inputs_no_overflow (__main__.TestRankingBoundariesAndFallbacks.test_extreme_scale_inputs_no_overflow)
+Massive token counts or compression ratios must clamp cleanly to [0.0, 1.0]. ... ok
+test_missing_linguistic_metrics_fallback (__main__.TestRankingBoundariesAndFallbacks.test_missing_linguistic_metrics_fallback)
+English and Afrikaans have no NCHLT gold morphology data (mbi_* are None or absent). ... ok
+test_single_tokenizer_ranking (__main__.TestRankingBoundariesAndFallbacks.test_single_tokenizer_ranking)
+Single-tokenizer leaderboard must assign rank 1 without ZeroDivisionError. ... ok
+test_tied_scores_deterministic_ordering (__main__.TestRankingBoundariesAndFallbacks.test_tied_scores_deterministic_ordering)
+Tokenizers with identical overall_scores must have deterministic ordering. ... ok
+----------------------------------------------------------------------
+Ran 30 tests in 0.001s
+OK

@@ -1,1 +1,57 @@
-[]
+[
+  {
+    "model_id": "bert-base-multilingual-cased",
+    "display_name": "bert-base-multilingual-cased",
+    "languages": [
+      "English",
+      "isiXhosa",
+      "isiZulu",
+      "Sesotho",
+      "Sepedi",
+      "Setswana",
+      "siSwati",
+      "Xitsonga"
+    ],
+    "metrics": {
+      "token_count": 50679.75,
+      "fertility": 2.4682347296889873,
+      "compression": 2.96098302844564,
+      "token_premium": 1.8480072199533255,
+      "mbi_precision": 0.2466278209939446,
+      "mbi_recall": 0.31651459249737873,
+      "mbi_f1": 0.258169873325026
+    },
+    "overall_score": 35.2744,
+    "efficiency_score": 43.5617,
+    "linguistic_score": 26.9871,
+    "score_breakdown": {
+      "overall_score": 35.2744,
+      "efficiency_score": 43.5617,
+      "linguistic_score": 26.9871,
+      "normalized_metrics": {
+        "token_count": 1.0,
+        "fertility": 0.3670586824222468,
+        "compression": 0.39219660568912806,
+        "token_premium": 0.2826690733177752,
+        "mbi_precision": 0.2466278209939446,
+        "mbi_recall": 0.31651459249737873,
+        "mbi_f1": 0.258169873325026
+      },
+      "inverted_metrics": {
+        "token_count": 0.0,
+        "fertility": 0.6329413175777532,
+        "compression": 0.39219660568912806,
+        "token_premium": 0.7173309266822248,
+        "mbi_precision": 0.2466278209939446,
+        "mbi_recall": 0.31651459249737873,
+        "mbi_f1": 0.258169873325026
+      },
+      "weights_used": {
+        "efficiency": 0.5,
+        "linguistic": 0.5
+      },
+      "missing_components": []
+    },
+    "added_at": "2026-09-19T20:54:03.745661+00:00"
+  }
+]
